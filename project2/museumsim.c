@@ -16,6 +16,15 @@ struct shared_data {
 	// For example:
 	//     pthread_mutex_t ticket_mutex;
 	//     int tickets;
+
+	pthread_mutex_t visitor_guide_mutex;
+	pthread_cond_t guide_inside_may_enter_cond; // indicate guide_inside or guide_may_enter changed
+	pthread_cond_t can_inside_cond; // indicate can_inside changes
+
+	int tickets remain;
+	int visitors_waiting; // # of visitors waiting outside of museum
+
+
 };
 
 static struct shared_data shared;
