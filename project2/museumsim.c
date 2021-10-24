@@ -155,5 +155,54 @@ void guide(int id)
             shared.guide_may_enter = 0;
         }
 		pthread_mutex_unlock(&shared.visitor_guide_mutex);
+		
+ while (1)
+    {
+        pthread_mutex_lock(&shared.visitor_guide_mutex);
+        // this guide already served VISITORS_PER_GUIDE visitors
+        if (served_so_far >= VISITORS_PER_GUIDE)
+        {
+            pthread_mutex_unlock(&shared.visitor_guide_mutex);
+            break;
+        }
+        if (shared.visitor_waiting)
+        {
+            served_so_far++;
+            shared.can_inside++;
+            shared.visitor_waiting--;
+            guide_admits(id);
+            pthread_cond_signal(&shared.can_inside_cond);
+            pthread_mutex_unlock(&shared.visitor_guide_mutex);
+        }
+        else if (!shared.tickets_remain) // visitor_waiting == 0 and tickets_remain == 0
+        {
+            pthread_mutex_unlock(&shared.visitor_guide_mutex);
+            break;
+        }
+        else // visitor_waiting == 0 and tickets_remain != 0
+        {
+            pthread_mutex_unlock(&shared.visitor_guide_mutex);
+        }
+    }
+
+	while (1)
+    {
+        pthread_mutex_lock(&shared.visitor_guide_mutex);
+        if (shared.visitor_leaves == shared.can_inside) // all visitor leaves
+        {
+            guide_leaves(id);
+            shared.guide_inside--;
+            if (shared.guide_inside == 0) // all guides leave, new guide can enter now
+            {
+                shared.guide_may_enter = 1;
+            }
+            pthread_cond_signal(&shared.guide_inside_may_enter_cond);
+            pthread_mutex_unlock(&shared.visitor_guide_mutex);
+            break;
+        }
+        pthread_mutex_unlock(&shared.visitor_guide_mutex);
+    }
+
+
 
 }
