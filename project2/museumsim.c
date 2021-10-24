@@ -21,7 +21,7 @@ struct shared_data {
 	pthread_cond_t guide_inside_may_enter_cond; // indicate guide_inside or guide_may_enter changed
 	pthread_cond_t can_inside_cond; // indicate can_inside changes
 
-	int tickets remain;
+	int tickets_remain;
 	int visitors_waiting; // # of visitors waiting outside of museum
 	int can_inside; // # of visitor can go inside
 	int guide_inside; // # of guides inside of museum 
@@ -73,7 +73,7 @@ void museum_destroy()
     pthread_cond_destroy(&shared.can_inside_cond);
 }
 
-}
+
 
 
 /**
@@ -81,9 +81,9 @@ void museum_destroy()
  */
 void visitor(int id)
 {
-	// visitor_arrives(id);
-	// visitor_tours(id);
-	// visitor_leaves(id);
+	
+	visitor_tours(id);
+	visitor_leaves(id);
 
     visitor_arrives(id);
 
@@ -133,11 +133,11 @@ static __thread int served_so_far = 0;  // number of visitors served by each gui
 void guide(int id)
 {
 	// guide_arrives(id);
-	// guide_enters(id);
-	// guide_admits(id);
-	// guide_leaves(id);
+	guide_enters(id);
+	guide_admits(id);
+    guide_leaves(id);
     
-	guide arrives(id);
+	guide_arrives(id);
 
  pthread_mutex_lock(&shared.visitor_guide_mutex);
 
@@ -205,4 +205,4 @@ void guide(int id)
 
 
 
-}
+
