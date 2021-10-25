@@ -27,10 +27,10 @@ struct shared_data {
 	int guide_inside; // # of guides inside of museum 
 	int visitor_leaves; // # of visitors entering and leaving museum
 	int guide_may_enter; // boolean flag indicating whether new arriving guide can enter museum
+    int visitor_inside;
 }
 
 static struct shared_data shared;
-
 
 /**
  * Set up the shared variables for your implementation.
@@ -50,7 +50,7 @@ void museum_init(int num_guides, int num_visitors)
     shared.tickets_remain = MIN(VISITORS_PER_GUIDE * num_guides, num_visitors);
     shared.guide_inside = 0;
     shared.can_inside = 0;
-    shared.visitor_waiting = 0;
+    shared.visitors_waiting = 0;
     shared.visitor_inside = 0;
     shared.visitor_leaves = 0;
     shared.guide_may_enter = 1;
@@ -96,7 +96,7 @@ void visitor(int id)
             return;
         }
         // get ticket and wait
-        shared.visitor_waiting++;
+        shared.visitors_waiting++;
         shared.tickets_remain--;
     }
 
@@ -165,21 +165,21 @@ void guide(int id)
             pthread_mutex_unlock(&shared.visitor_guide_mutex);
             break;
         }
-        if (shared.visitor_waiting)
+        if (shared.visitors_waiting)
         {
             served_so_far++;
             shared.can_inside++;
-            shared.visitor_waiting--;
+            shared.visitors_waiting--;
             guide_admits(id);
             pthread_cond_signal(&shared.can_inside_cond);
             pthread_mutex_unlock(&shared.visitor_guide_mutex);
         }
-        else if (!shared.tickets_remain) // visitor_waiting == 0 and tickets_remain == 0
+        else if (!shared.tickets_remain) // visitors_waiting == 0 and tickets_remain == 0
         {
             pthread_mutex_unlock(&shared.visitor_guide_mutex);
             break;
         }
-        else // visitor_waiting == 0 and tickets_remain != 0
+        else // visitors_waiting == 0 and tickets_remain != 0
         {
             pthread_mutex_unlock(&shared.visitor_guide_mutex);
         }
@@ -202,6 +202,7 @@ void guide(int id)
         }
         pthread_mutex_unlock(&shared.visitor_guide_mutex);
     }
+}
 
 
 
