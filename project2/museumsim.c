@@ -28,9 +28,9 @@ struct shared_data {
 	int visitor_leaves; // # of visitors entering and leaving museum
 	int guide_may_enter; // boolean flag indicating whether new arriving guide can enter museum
     int visitor_inside;
-}
+} shared;
 
-static struct shared_data shared;
+// static struct shared_data shared;
 
 /**
  * Set up the shared variables for your implementation.
@@ -141,7 +141,7 @@ void guide(int id)
 
  pthread_mutex_lock(&shared.visitor_guide_mutex);
 
-{
+
         while (shared.guide_inside == GUIDES_ALLOWED_INSIDE || !shared.guide_may_enter)
         {
             pthread_cond_wait(&shared.guide_inside_may_enter_cond, &shared.visitor_guide_mutex);
@@ -203,7 +203,6 @@ void guide(int id)
         pthread_mutex_unlock(&shared.visitor_guide_mutex);
     }
 }
-
 
 
 
