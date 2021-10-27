@@ -121,6 +121,7 @@ void visitor(int id)
 {
     visitor_arrives(id);
     int museum_tickets_sold = 0;
+
     pthread_mutex_lock(&shared.ticket_mutex);
     {
         if (shared.museum_tickets == 0)
@@ -135,9 +136,10 @@ void visitor(int id)
             shared.museum_tickets -= 1;
             shared.museum_numbers_full += 1;
             pthread_cond_broadcast(&shared.museum_visitor_arr);
-            pthread_mutex_unlock(&shared.ticket_mutex);
+            
         }
     }
+     pthread_mutex_unlock(&shared.ticket_mutex);
     if (museum_tickets_sold == 1)
     {
         return;
@@ -149,6 +151,7 @@ void visitor(int id)
         pthread_cond_wait(&shared.museum_guide_tours, &shared.guide_mutex);
     }
     pthread_mutex_unlock(&shared.guide_mutex);
+
     pthread_mutex_lock(&shared.visitor_mutex);
     {
         while (shared.museum_cur_visitor_waiting_outside == 0)
@@ -159,6 +162,7 @@ void visitor(int id)
         pthread_cond_signal(&shared.museum_g_ad);
     }
     pthread_mutex_unlock(&shared.visitor_mutex);
+    
     visitor_tours(id);
     pthread_mutex_lock(&shared.visitor_mutex);
     {
