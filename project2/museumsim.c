@@ -15,19 +15,33 @@ struct shared_data {
 	// Add any relevant synchronization constructs and shared state here.
 	// For example:
 	//     pthread_mutex_t ticket_mutex;
-	//     int tickets;
+	//     int tickets_remain;
 
-	pthread_mutex_t visitor_guide_mutex;
-	pthread_cond_t guide_inside_may_enter_cond; // indicate guide_inside or guide_may_enter changed
-	pthread_cond_t can_inside_cond; // indicate can_inside changes
 
-	int tickets_remain;
-	int visitors_waiting; // # of visitors waiting outside of museum
-	int can_inside; // # of visitor can go inside
-	int guide_inside; // # of guides inside of museum 
-	int visitor_leaves; // # of visitors entering and leaving museum
-	int guide_may_enter; // boolean flag indicating whether new arriving guide can enter museum
-    int visitor_inside;
+
+    pthread_mutex_t ticket_mutex;
+    pthread_mutex_t visitor_mutex;
+    pthread_mutex_t guide_mutex;
+
+    pthread_cond_t museum_visitor_arrives;
+    pthread_cond_t museum_visitor_enters;
+    pthread_cond_t museum_visitor_finish;
+
+    pthread_cond_t museum_guide_admits;
+    pthread_cond_t museum_guide_enters;
+     pthread_cond_t museum_guide_tours;
+    pthread_cond_t museum_guide_finish;
+
+    int tickets_remain;
+    int museum_ticket_full;
+    int museum_ticket_per_guide;
+    int museum_visitor;
+    int museum_visitor_waiting_outside;
+    int museum_visitor_leaves;
+    int museum_guide_waiting_outside;
+    int museum_guide_inside;
+    
+
 } shared;
 
 // static struct shared_data shared;
@@ -42,19 +56,33 @@ void museum_init(int num_guides, int num_visitors)
 {
 	// pthread_mutex_init(&shared.ticket_mutex, NULL);
 	//
-	// shared.tickets = MIN(VISITORS_PER_GUIDE * num_guides, num_visitors);
+	// shared.tickets_remain = MIN(VISITORS_PER_GUIDE * num_guides, num_visitors);
 
-    pthread_mutex_init(&shared.visitor_guide_mutex, NULL);
-    pthread_cond_init(&shared.guide_inside_may_enter_cond, NULL);
-    pthread_cond_init(&shared.can_inside_cond, NULL);
+  
+
+    pthread_mutex_init(&shared.ticket_mutex, NULL);
+    pthread_mutex_init(&shared.visitor_mutex, NULL);
+    pthread_mutex_init(&shared.guide_mutex, NULL);
+
+    pthread_cond_init(&shared.museum_visitor_arrives, NULL);
+    pthread_cond_init(&shared.museum_visitor_enters, NULL);
+    pthread_cond_init(&shared.museum_visitor_finish, NULL);
+
+    pthread_cond_init(&shared.museum_guide_enters, NULL);
+    pthread_cond_init(&shared.museum_guide_admits, NULL);
+    pthread_cond_init(&shared.museum_guide_tours, NULL);
+    pthread_cond_init(&shared.museum_guide_finish, NULL);
+   
+ 
     shared.tickets_remain = MIN(VISITORS_PER_GUIDE * num_guides, num_visitors);
-    shared.guide_inside = 0;
-    shared.can_inside = 0;
-    shared.visitors_waiting = 0;
-    shared.visitor_inside = 0;
-    shared.visitor_leaves = 0;
-    shared.guide_may_enter = 1;
-
+    shared.museum_ticket_per_guide = MIN(VISITORS_PER_GUIDE * num_guides, num_visitors);
+    shared.museum_ticket_full = 0;
+    shared.museum_visitor_waiting_outside = 0;
+    shared.museum_visitor = 0;
+    museum_visitor_finish = 0;
+    shared.museum_guide_inside = 0;
+    shared.museum_guide_waiting_outside = 0;
+    
 }
 
 
@@ -68,9 +96,17 @@ void museum_destroy()
 {
 	// pthread_mutex_destroy(&shared.ticket_mutex);
 
-    pthread_mutex_destroy(&shared.visitor_guide_mutex);
-    pthread_cond_destroy(&shared.guide_inside_may_enter_cond);
-    pthread_cond_destroy(&shared.can_inside_cond);
+    pthread_mutex_destroy(&shared.ticket_mutex);
+    pthread_mutex_destroy(&shared.visitor_mutex);
+    pthread_mutex_destroy(&shared.guide_mutex);
+    pthread_cond_destroy(&shared.museum_visitor_arrives);
+    pthread_cond_destroy(&shared.museum_visitor_enters);
+    pthread_cond_destroy(&shared.museum_visitor_finish);
+    pthread_cond_destroy(&shared.museum_guide_admits);
+    pthread_cond_destroy(&shared.museum_guide_enters);
+    pthread_cond_destroy(&shared.museum_guide_tours);
+    pthread_cond_destroy(&shared.museum_guide_finish);
+   
 }
 
 
@@ -81,47 +117,74 @@ void museum_destroy()
  */
 void visitor(int id)
 {
-	
-	visitor_tours(id);
-	visitor_leaves(id);
+    pthread_mutex_unlock(&shared.visitor_mutex);
+*/
 
-    visitor_arrives(id);
+visitor_arrives(id);
+visitor_tours(id);
+visitor_leaves(id);
 
-    pthread_mutex_lock(&shared.visitor_guide_mutex);
+    int museum_ticket_finished= 0;
+    pthread_mutex_lock(&shared.ticket_mutex);
     {
-        if (shared.tickets_remain == 0) // If no tickets remain, leave directly
+        if (shared.tickets_remain == 0)
         {
             visitor_leaves(id);
-            pthread_mutex_unlock(&shared.visitor_guide_mutex);
-            return;
+            pthread_cond_broadcast(&shared.museum_guide_finish);
+            pthread_mutex_unlock(&shared.ticket_mutex);
+            museum_ticket_finished= 1;
         }
-        // get ticket and wait
-        shared.visitors_waiting++;
-        shared.tickets_remain--;
-    }
-
-	pthread_mutex_unlock(&shared.visitor_guide_mutex);
-
-    pthread_mutex_lock(&shared.visitor_guide_mutex);
-    {
-        // wait for admitance from guides
-        while (shared.visitor_inside == shared.can_inside)
+        else
         {
-            pthread_cond_wait(&shared.can_inside_cond, &shared.visitor_guide_mutex);
+            shared.tickets_remain -= 1;
+            shared.museum_ticket_full += 1;
+            pthread_cond_broadcast(&shared.museum_visitor_arrives);
+            pthread_mutex_unlock(&shared.ticket_mutex);
         }
-        shared.visitor_inside++;
-        visitor_tours(id);
     }
-
-    pthread_mutex_unlock(&shared.visitor_guide_mutex);
-
-    pthread_mutex_lock(&shared.visitor_guide_mutex);
+    if (museum_ticket_finished== 1)
     {
-        visitor_leaves(id);
-        shared.visitor_leaves++;
+        return;
     }
 
-    pthread_mutex_unlock(&shared.visitor_guide_mutex);
+    pthread_mutex_lock(&shared.guide_mutex);
+    while (shared.museum_guide_inside == 0)
+    {
+        pthread_cond_wait(&shared.museum_guide_tours, &shared.guide_mutex);
+    }
+    pthread_mutex_unlock(&shared.guide_mutex);
+    pthread_mutex_lock(&shared.visitor_mutex);
+    {
+        while (shared.museum_visitor_waiting_outside == 0)
+        {
+            pthread_cond_wait(&shared.museum_visitor_enters, &shared.visitor_mutex);
+        }
+        shared.museum_visitor_waiting_outside = 0;
+        pthread_cond_signal(&shared.museum_guide_admits);
+    }
+    pthread_mutex_unlock(&shared.visitor_mutex);
+
+    visitor_tours(id);
+
+    pthread_mutex_lock(&shared.visitor_mutex);
+    {
+        if (shared.museum_visitor == VISITORS_PER_GUIDE * GUIDES_ALLOWED_INSIDE)
+        {
+            museum_visitor_finish = 0;
+            visitor_leaves(id);
+            pthread_cond_signal(&shared.museum_guide_enters);
+        }
+        while (museum_visitor_finish == 0)
+        {
+            pthread_cond_wait(&shared.museum_visitor_finish, &shared.visitor_mutex);
+        }
+        museum_visitor_finish = 0;
+
+        visitor_leaves(id);
+
+        pthread_cond_signal(&shared.museum_guide_enters);
+    }
+    pthread_mutex_unlock(&shared.visitor_mutex);
 
 }
 
@@ -133,75 +196,80 @@ static __thread int served_so_far = 0;  // number of visitors served by each gui
 void guide(int id)
 {
 	// guide_arrives(id);
-	guide_enters(id);
-	guide_admits(id);
-    guide_leaves(id);
-    
-	guide_arrives(id);
 
- pthread_mutex_lock(&shared.visitor_guide_mutex);
-
-
-        while (shared.guide_inside == GUIDES_ALLOWED_INSIDE || !shared.guide_may_enter)
+ pthread_mutex_lock(&shared.guide_mutex);
+    {
+        guide_arrives(id);
+        shared.museum_guide_waiting_outside += 1;
+        while (shared.museum_guide_inside == GUIDES_ALLOWED_INSIDE)
         {
-            pthread_cond_wait(&shared.guide_inside_may_enter_cond, &shared.visitor_guide_mutex);
+            pthread_cond_wait(&shared.museum_guide_finish, &shared.guide_mutex);
         }
         guide_enters(id);
-        shared.guide_inside++;
-        // if number of guides inside reaches GUIDES_ALLOWED_INSIDE, new guide can only enter
-        // after this group of GUIDES_ALLOWED_INSIDE guides leave
-        if (shared.guide_inside == GUIDES_ALLOWED_INSIDE)
-        {
-            shared.guide_may_enter = 0;
-        }
-		pthread_mutex_unlock(&shared.visitor_guide_mutex);
-		
- while (1)
+        shared.museum_guide_waiting_outside -= 1;
+        shared.museum_guide_inside += 1;
+        pthread_cond_broadcast(&shared.museum_guide_tours);
+    }
+    pthread_mutex_unlock(&shared.guide_mutex);
+
+    int n_visitors = 0;
+    int n_tickets_remain = -1;
+    pthread_mutex_lock(&shared.guide_mutex);
     {
-        pthread_mutex_lock(&shared.visitor_guide_mutex);
-        // this guide already served VISITORS_PER_GUIDE visitors
-        if (served_so_far >= VISITORS_PER_GUIDE)
+        n_tickets_remain = MIN(shared.museum_ticket_per_guide, VISITORS_PER_GUIDE);
+        shared.museum_ticket_per_guide -= VISITORS_PER_GUIDE;
+    }
+    pthread_mutex_unlock(&shared.guide_mutex);
+
+    while (n_visitors != n_tickets_remain)
+    {
+        pthread_mutex_lock(&shared.ticket_mutex);
         {
-            pthread_mutex_unlock(&shared.visitor_guide_mutex);
-            break;
+            while (shared.museum_ticket_full == 0 && shared.tickets_remain != 0)
+            {
+                pthread_cond_wait(&shared.museum_visitor_arrives, &shared.ticket_mutex);
+            }
+            shared.museum_ticket_full -= 1;
         }
-        if (shared.visitors_waiting)
+        pthread_mutex_unlock(&shared.ticket_mutex);
+        n_visitors += 1;
+        pthread_mutex_lock(&shared.visitor_mutex);
         {
-            served_so_far++;
-            shared.can_inside++;
-            shared.visitors_waiting--;
+            while (shared.museum_visitor_waiting_outside != 0)
+            {
+                pthread_cond_wait(&shared.museum_guide_admits, &shared.visitor_mutex);
+            }
+            shared.museum_visitor_waiting_outside = 1;
+            shared.museum_visitor += 1;
             guide_admits(id);
-            pthread_cond_signal(&shared.can_inside_cond);
-            pthread_mutex_unlock(&shared.visitor_guide_mutex);
+            pthread_cond_signal(&shared.museum_visitor_enters);
         }
-        else if (!shared.tickets_remain) // visitors_waiting == 0 and tickets_remain == 0
+        pthread_mutex_unlock(&shared.visitor_mutex);
+    }
+    while (n_visitors >= 0)
+    {
+        pthread_mutex_lock(&shared.visitor_mutex);
         {
-            pthread_mutex_unlock(&shared.visitor_guide_mutex);
-            break;
+            while (museum_visitor_finish != 0)
+            {
+                pthread_cond_wait(&shared.museum_guide_enters, &shared.visitor_mutex);
+            }
+            museum_visitor_finish = 1;
+            shared.museum_visitor -= 1;
+            pthread_cond_signal(&shared.museum_visitor_finish);
         }
-        else // visitors_waiting == 0 and tickets_remain != 0
-        {
-            pthread_mutex_unlock(&shared.visitor_guide_mutex);
-        }
+        pthread_mutex_unlock(&shared.visitor_mutex);
+        n_visitors -= 1;
     }
 
-	while (1)
+    pthread_mutex_lock(&shared.guide_mutex);
     {
-        pthread_mutex_lock(&shared.visitor_guide_mutex);
-        if (shared.visitor_leaves == shared.can_inside) // all visitor leaves
-        {
-            guide_leaves(id);
-            shared.guide_inside--;
-            if (shared.guide_inside == 0) // all guides leave, new guide can enter now
-            {
-                shared.guide_may_enter = 1;
-            }
-            pthread_cond_signal(&shared.guide_inside_may_enter_cond);
-            pthread_mutex_unlock(&shared.visitor_guide_mutex);
-            break;
-        }
-        pthread_mutex_unlock(&shared.visitor_guide_mutex);
+        shared.museum_guide_inside -= 1;
+        guide_leaves(id);
+        pthread_cond_broadcast(&shared.museum_guide_finish);
     }
+    pthread_mutex_unlock(&shared.guide_mutex);
+
 }
 
 
